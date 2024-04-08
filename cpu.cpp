@@ -122,3 +122,117 @@ void CPU::clock() {
     //Decrement remaining cycles on every clock call.
     remaining_cycles--;
 }
+
+//Implied - The data is implied by the operation, so we don't really need to do anything. For example, CLC is an implied mode operation, it's implied that this operates on the status register (specifically the carry flag).
+uint8_t CPU::IMP() {
+    //However, the instruction may be operating on the accumulator, so we are going to fetch it.
+    fetched = a;
+    return 0;   
+}
+
+//Immediate - Data is taken from the byte following the opcode.
+uint8_t CPU::IMM() {
+    //Set the address where the data we will need for the operation is stored, the data we need is the byte following the opcode (We have already incremented pc to point to this data in clock, but we increment pc after).
+    address_ABS = pc;
+    pc++;
+    return 0;
+}
+
+//Zero Page Addressing - the byte of data we need is on page 0.
+uint8_t CPU::ZP0() {
+    //Get the address of the data we need
+    address_ABS = read(pc);
+    pc++;
+    //Zero out the first byte to get the zeroth page (Bitwise and operation).
+    address_ABS &= 0x00FF;
+    return 0;
+}
+
+//Zero Page Addressing With X register offset - the byte of data we need is on page 0 plus the offset of the value in the X register. Useful for iteration.
+uint8_t CPU::ZPX() {
+    //Get the address of the data we need
+    address_ABS = (read(pc) + x);
+    pc++;
+    //Zero out the first byte to get the zeroth page (Bitwise and operation).
+    address_ABS &= 0x00FF;
+    return 0;
+}
+
+//Zero Page Addressing With Y register offset - the byte of data we need is on page 0 plus the offset of the value in the Y register. Useful for iteration.
+uint8_t CPU::ZPY() {
+    //Get the address of the data we need
+    address_ABS = (read(pc) + y);
+    pc++;
+    //Zero out the first byte to get the zeroth page (Bitwise and operation).
+    address_ABS &= 0x00FF;
+    return 0;
+}
+
+//Absolute Addressing - address of data required is fully specified.
+uint8_t CPU::ABS() {
+    //Example: If we had LDA $1028, the low byte would be 0x1000 and the high byte would be 0x0028. Or - ing these together results in the full 16 bit memory address 0x1028 as needed.
+
+    //Get the low byte
+    uint16_t low = read(pc);
+    pc++;
+    //Get the high byte
+    uint16_t high = read(pc);
+    pc++;
+    //Or the low and high together to get the full address.
+    address_ABS &= (high << 8) | low;
+    return 0;
+}
+
+//Absolute Addressing With X Register Offset- address of data required is fully specified plus an X register offset.
+uint8_t CPU::ABX() {
+    //Get the low byte
+    uint16_t low = read(pc);
+    pc++;
+    //Get the high byte
+    uint16_t high = read(pc);
+    pc++;
+    //Or the low and high together to get the full address.
+    address_ABS &= (high << 8) | low;
+
+    //However, we must check if we are now on a new page. If we are, we may need an additional clock cycle.
+    if ((address_ABS & 0xFF00) != (high << 8)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+//Absolute Addressing With Y Register Offset- address of data required is fully specified plus a Y register offset.
+uint8_t CPU::ABY() {
+    //Get the low byte
+    uint16_t low = read(pc);
+    pc++;
+    //Get the high byte
+    uint16_t high = read(pc);
+    pc++;
+    //Or the low and high together to get the full address.
+    address_ABS &= (high << 8) | low;
+
+    //However, we must check if we are now on a new page. If we are, we may need an additional clock cycle.
+    if ((address_ABS & 0xFF00) != (high << 8)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+//Indirect Addressing - Pointers
+uint8_t CPU::IND() {
+    //Get the low byte of the pointer
+    uint16_t ptr_low = read(pc);
+    pc++;
+    //Get the high byte of the pointer
+    uint16_t ptr_high = read(pc);
+    pc++;
+    //Or the low and high together to get the full address.
+    uint16_t ptr = (ptr_high << 8) | ptr_low;
+    //Get the data at the pointer
+    address_ABS = (read(ptr + 1) << 8) | read(ptr + 0);
+
+    return 0;
+}

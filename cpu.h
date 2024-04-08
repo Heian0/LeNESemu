@@ -49,7 +49,7 @@ class CPU {
         //Stack Pointer - Points to a location on the bus
         uint8_t stpk = 0x00;
         //Program Counter
-        uint16_t pc = 0x00;
+        uint16_t pc = 0x0000;
         
     // ---------------- CPU Adressing Modes -----------------
 
