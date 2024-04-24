@@ -143,7 +143,7 @@ class CPU {
 
         //Functions to access the status register.
         uint8_t getFlag(CPU_Flags flag);
-        void setFlad(CPU_Flags flag, bool value);
+        void setFlag(CPU_Flags flag, bool value);
 
         std::vector<instruction> instructions;
 };

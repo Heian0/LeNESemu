@@ -95,6 +95,10 @@ uint8_t CPU::read(uint16_t address) {
     return bus->read(address, false);
 }
 
+/*--------------------------------------------------------------------
+    ===================== Addressing Modes =======================
+*-------------------------------------------------------------------*/
+
 void CPU::clock() {
     //This is not a clock accurate emulation.
     //Remaining cycles is initially set to 0 so we can start the instruction, but depending on the instruction, we may me asked to wait (aka call clock())
@@ -231,8 +235,156 @@ uint8_t CPU::IND() {
     pc++;
     //Or the low and high together to get the full address.
     uint16_t ptr = (ptr_high << 8) | ptr_low;
-    //Get the data at the pointer
-    address_ABS = (read(ptr + 1) << 8) | read(ptr + 0);
 
+    //Simulate end of page bug
+    if (ptr_low == 0x00FF) {
+        address_ABS = (read(ptr & 0xFF00) << 8) | read(ptr + 0);
+    }
+
+    //Get the data at the pointer
+    else {
+        address_ABS = (read(ptr + 1) << 8) | read(ptr + 0);
+    }
+
+    return 0;
+}
+
+//Indirect Addressing of Zero Page with X Offset
+uint8_t CPU::IZX() {
+    uint16_t ptr = read(pc);
+    pc++;
+
+    //Get low byte of the pointer and offset by x register.
+    uint16_t ptr_low_after_offset = read((uint16_t)(ptr + (uint16_t)x) & 0x00FF);
+    //Get high byte of the pointer and offset by x register (Adding one to read next byte of our final address).
+    uint16_t ptr_high_after_offset = read((uint16_t)(ptr + (uint16_t)x + 1) & 0x00FF);
+
+    address_ABS = (ptr_high_after_offset << 8) | ptr_low_after_offset;
+
+    return 0;
+}
+
+//Indirect Addressing of Zero Page with Y Offset - Performed after address is read from memory.
+uint8_t CPU::IZY() {
+	uint16_t ptr = read(pc);
+	pc++;
+
+	uint16_t address_low = read(ptr & 0x00FF);
+	uint16_t address_high = read((ptr + 1) & 0x00FF);
+
+	address_ABS = (address_high << 8) | address_low;
+	address_ABS += y;
+	
+    //We have crossed a page, so an extra clock cycle is required.
+	if ((address_ABS & 0xFF00) != (address_high << 8)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+//Relative Addressing Mode - For branching instructions, jump to a nearby address from the branch instruction, specifically less than or equal to 127 memory locations.
+uint8_t CPU::REL() {
+    address_REL = read(pc);
+    pc++;
+    //Check for negativity
+    if (address_REL & 0x80) {
+        address_REL |= 0xFF00;
+    }
+    return 0;
+}
+
+/*--------------------------------------------------------------------
+    ======================= Instructions ========================
+*-------------------------------------------------------------------*/
+
+//Fetch - fetch data stored at address_ABS.
+uint8_t CPU::fetch() {
+    //Get our data so long as we are not in implied addressing mode
+    if (instructions[opcode].address_mode != &CPU::IMP) {
+        fetched = read(address_ABS);
+    }
+    return fetched;
+}
+
+//LDA - Load the accumulator with fetched data.
+uint8_t CPU::LDA() {
+    fetch();
+    a = fetched;
+    //Set zero flag if this operation has zeroed out the accumulator.
+    setFlag(zero, a == 0x00);
+    //Set negative flag if bit 7 of the accumulator is 1 (aka negative).
+    setFlag(negative, a == 0x80);
+    return 0;
+}
+
+//LDX - Load the X register with fetched data.
+uint8_t CPU::LDX() {
+    fetch();
+    x = fetched;
+    setFlag(zero, x == 0x00);
+    setFlag(negative, x == 0x80);
+    return 0;
+}
+
+//LDY - Load the Y register with fetched data.
+uint8_t CPU::LDY() {
+    fetch();
+    y = fetched;
+    setFlag(zero, y == 0x00);
+    setFlag(negative, y == 0x80);
+    return 0;
+}
+
+//STA - Store data from the accumulator into memory.
+uint8_t CPU::STA() {
+    write(address_ABS, a);
+    return 0;
+}
+
+//STX - Store data from the X register into memory.
+uint8_t CPU::STX() {
+    write(address_ABS, x);
+    return 0;
+}
+
+//STy - Store data from the Y register into memory.
+uint8_t CPU::STY() {
+    write(address_ABS, y);
+    return 0;
+}
+
+//AND - Bitwise and the accumulator with fetched data.
+uint8_t CPU::AND() {
+    fetch();
+    //And the data in the accumulator with the fetched data.
+    a &= fetched;
+    //Set zero flag if this operation has zeroed out the accumulator.
+    setFlag(zero, a == 0x00);
+    //Set negative flag if bit 7 of the accumulator is 1 (aka negative).
+    setFlag(negative, a == 0x80);
+    //Potentially may require an extra clock cycle if page is crossed, but this is checked in addressing mode. Recall that our clock function will add another
+    //cycle if both the instruction and addressing mode call for another cycle.
+    return 1;
+}
+
+//BCS - Branch if the carry bit of the status register is set.
+uint8_t CPU::BCS() {
+    //If the carry bit is set
+    if (getFlag(carry) == 1) {
+        //change address to the relative address from relative addressing, which is initialized as 0
+        address_ABS = pc + address_REL;
+        //Add 1 to the remaining cycles
+        remaining_cycles++;
+
+        //If our branch crosses a page, add another tick to our cycles.
+        if ((address_ABS && 0xFF00) != (pc & 0xFF00)) {
+            remaining_cycles++;
+        }
+
+        //Set location of next instruction after branch
+        pc = address_ABS;
+    }
+    
     return 0;
 }
