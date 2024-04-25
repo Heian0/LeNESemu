@@ -348,10 +348,277 @@ uint8_t CPU::STX() {
     return 0;
 }
 
-//STy - Store data from the Y register into memory.
+//STY - Store data from the Y register into memory.
 uint8_t CPU::STY() {
     write(address_ABS, y);
     return 0;
+}
+
+//PHA - Push the accumulator.
+uint8_t CPU::PHA() {
+    //Write the accumulator's contents to 0x100 past the stack pointer.
+    write(stkp + 0x100, a);
+    stkp--;
+    return 0;
+}
+
+//PHA - Push the status register.
+uint8_t CPU::PHP() {
+    //Set break status to 1 before push.
+    write(stkp + 0x0100, status | brk | unused);
+    setFlag(brk, 0);
+    setFlag(unused, 0);
+    stkp--;
+    return 0;
+}
+
+//PLA - Pull data from the stack into the accumulator.
+uint8_t CPU::PLA() {
+    stkp++;
+    a = read(stkp + 0x0100);
+    //Check if we read a value of zero.
+    setFlag(zero, a = 0x00);
+    //Check if we read a negative number.
+    setFlag(negative, a & 0x80);
+    return 0;
+}
+
+//PLP - Pull data from the stack into the status register.
+uint8_t CPU::PLP() {
+    stkp++;
+    status = read(stkp + 0x0100);
+    setFlag(unused, 1);
+    return 0;
+}
+
+//TAX - Transfer data from the accumulator to the X register.
+uint8_t CPU::TAX() {
+    x = a;
+    setFlag(zero, x == 0x00);
+    setFlag(negative, x & 0x80);
+    return 0;
+}
+
+//TAX - Transfer data from the accumulator to the Y register.
+uint8_t CPU::TAY() {
+    y = a;
+    setFlag(zero, y == 0x00);
+    setFlag(negative, y & 0x80);
+    return 0;
+}
+
+//TXA - Transfer data from the X register to the accumulator.
+uint8_t CPU::TXA() {
+    a = x;
+    setFlag(zero, a == 0x00);
+    setFlag(negative, a & 0x80);
+    return 0;
+}
+
+//TYA - Transfer data from the Y register to the accumulator.
+uint8_t CPU::TYA() {
+    a = y;
+    setFlag(zero, a == 0x00);
+    setFlag(negative, a & 0x80);
+    return 0;
+}
+
+//TSX - Transfer data from the stack pointer into the X register.
+uint8_t CPU::TSX() {
+    x = stkp;
+    setFlag(zero, x == 0x00);
+    setFlag(negative, x & 0x80);
+    return 0;
+}
+
+//TXS - Transfer data from the X register to the stack pointer.
+uint8_t CPU::TXA() {
+    stkp = x;
+    setFlag(zero, stkp == 0x00);
+    setFlag(negative, stkp & 0x80);
+    return 0;
+}
+
+//ADC - Add with carry.
+uint8_t CPU::ADC() {
+    //Fetch data to add
+    fetch();
+
+    //Cast elements to 16 bits.
+    uint8_t temp = (int16_t)a + (uint16_t)fetched + (uint16_t)getFlag(carry);
+
+    //If temp is greater than 255 (max value of an 8-bit integer) we need to set the carry bit.
+    setFlag(carry, temp > 255);
+
+    //Set the zero flag - remember we only care about the lower 8 digits since we have cast to a 16-bit integer.
+    setFlag(zero, (temp & 0xFF00) == 0);
+
+    //Set overflow according to the folowing logic.
+    setFlag(overflow, (~((uint16_t)a ^ (uint16_t)fetched) & ((uint16_t)a ^ (uint16_t)temp)) & 0x0080);
+
+    //Set negative flag - again we are working with a 16-bit integer.
+    setFlag(negative, (temp & 0x0080));
+
+    //Store the 8 bit result into the acculator.
+    a = temp & 0x00FF;
+
+    //May need an additional clock cycle here.
+    return 1;
+}
+
+//SBC - Subtraction with carry. (A = A - M - (1 - C))
+uint8_t CPU::SBC() {
+    fetch();
+
+    //Consider that it is possible to rewrite the above formula as A = A + (-M) + 1 + C
+    // -M + 1 is just the two's complement of M. Thus we can invert M and utilize our addition method.
+
+    //Let's invert our fetched data.
+    uint16_t value = (uint16_t)(~fetched);
+
+	uint16_t temp = (uint16_t)a + value + (uint16_t)getFlag(carry);
+	setFlag(carry, temp & 0xFF00);
+	setFlag(zero, ((temp & 0x00FF) == 0));
+	setFlag(overflow, (temp ^ (uint16_t)a) & (temp ^ value) & 0x0080);
+	setFlag(negative, temp & 0x0080);
+	a = temp & 0x00FF;
+	return 1;
+}
+
+//DEC - Decrement memory
+uint8_t CPU::DEC() {
+	fetch();
+	uint8_t temp = fetched - 1;
+	write(address_ABS, temp & 0x00FF);
+	setFlag(zero, (temp & 0x00FF) == 0x0000);
+	setFlag(negative, temp & 0x0080);
+	return 0;
+}
+
+//DEC - Decrement the X register.
+uint8_t CPU::DEX()
+{
+	x--;
+	setFlag(zero, x == 0x00);
+	setFlag(negative, x & 0x80);
+	return 0;
+}
+
+//DEY - Decrement the Y register.
+uint8_t CPU::DEY()
+{
+	y--;
+	setFlag(zero, y == 0x00);
+	setFlag(negative, y & 0x80);
+	return 0;
+}
+
+//INC - Increment memory
+uint8_t CPU::INC() {
+	fetch();
+	uint8_t temp = fetched + 1;
+	write(address_ABS, temp & 0x00FF);
+	setFlag(zero, (temp & 0x00FF) == 0x0000);
+	setFlag(negative, temp & 0x0080);
+	return 0;
+}
+
+//INX - Increment the X register.
+uint8_t CPU::INX()
+{
+	x++;
+	setFlag(zero, x == 0x00);
+	setFlag(negative, x & 0x80);
+	return 0;
+}
+
+//INY - Increment the Y register.
+uint8_t CPU::INY()
+{
+	y++;
+	setFlag(zero, y == 0x00);
+	setFlag(negative, y & 0x80);
+	return 0;
+}
+
+//ASL - Arithmetic Shift Left, shifts all bits left one position. 0 is shifted into bit 0 and the original bit 7 is shifted into the carry.
+uint8_t CPU::ASL() {
+    fetch();
+    uint16_t temp = (uint16_t)fetched << 1;
+    setFlag(carry, (temp & 0xFF00) > 0);
+	setFlag(zero, (temp & 0x00FF) == 0x00);
+	setFlag(negative, temp & 0x0080);
+    //Set accumulator to temp if we are using implied addressing
+	if (instructions[opcode].address_mode == CPU::IMP) {
+		a = temp & 0x00FF;
+    }
+
+    //otherwise write to memory
+	else {
+        write(address_ABS, temp & 0x00FF);
+    }
+
+	return 0;
+}
+
+//ROL - Rotate Left, Shift all bits in fetched data left, storing the 7th bit into the carry and the carry into bit 0.
+uint8_t CPU::ROL() {
+    fetch();
+	uint16_t temp = (uint16_t)(fetched << 1) | getFlag(carry);
+	setFlag(carry, temp & 0xFF00);
+    setFlag(zero, (temp & 0x00FF) == 0x0000);
+    setFlag(negative, temp & 0x0080);
+
+    //Set accumulator to temp if we are using implied addressing
+	if (instructions[opcode].address_mode == CPU::IMP) {
+		a = temp & 0x00FF;
+    }
+    //otherwise write to memory
+	else {
+        write(address_ABS, temp & 0x00FF);
+    }
+
+	return 0;
+}
+
+//LSR - Logical Shift Right, shifts all bits right one position. Bit 0 is shifted into bit 7 and the original bit 0 is shifted into the carry.
+uint8_t CPU::LSR() {
+    fetch();
+	setFlag(carry, fetched & 0x0001);
+	uint16_t temp = fetched >> 1;	
+	setFlag(zero, (temp & 0x00FF) == 0x0000);
+	setFlag(negative, temp & 0x0080);
+
+    //Set accumulator to temp if we are using implied addressing
+	if (instructions[opcode].address_mode == CPU::IMP) {
+		a = temp & 0x00FF;
+    }
+    //otherwise write to memory
+	else {
+        write(address_ABS, temp & 0x00FF);
+    }
+
+	return 0;
+}
+
+//ROR - Rotate right, shifts all bits right one position. The Carry is shifted into bit 7 and the original bit 0 is shifted into the Carry.
+uint8_t CPU::ROR () {
+	fetch();
+	uint16_t temp = (uint16_t)(getFlag(carry) << 7) | (fetched >> 1);
+	setFlag(carry, fetched & 0x01);
+	setFlag(zero, (temp & 0x00FF) == 0x00);
+	setFlag(negative, temp & 0x0080);
+
+    //Set accumulator to temp if we are using implied addressing
+	if (instructions[opcode].address_mode == CPU::IMP) {
+		a = temp & 0x00FF;
+    }
+    //otherwise write to memory
+	else {
+        write(address_ABS, temp & 0x00FF);
+    }
+
+	return 0;
 }
 
 //AND - Bitwise and the accumulator with fetched data.
@@ -366,6 +633,122 @@ uint8_t CPU::AND() {
     //Potentially may require an extra clock cycle if page is crossed, but this is checked in addressing mode. Recall that our clock function will add another
     //cycle if both the instruction and addressing mode call for another cycle.
     return 1;
+}
+
+//EOR - Bitwise XOR the accumulator with fetched data.
+uint8_t CPU::EOR() {
+    fetch();
+    //XOR the data in the accumulator with the fetched data.
+    a ^= fetched;
+    //Set zero flag if this operation has zeroed out the accumulator.
+    setFlag(zero, a == 0x00);
+    //Set negative flag if bit 7 of the accumulator is 1 (aka negative).
+    setFlag(negative, a == 0x80);
+    //Potentially may require an extra clock cycle if page is crossed, but this is checked in addressing mode. Recall that our clock function will add another
+    //cycle if both the instruction and addressing mode call for another cycle.
+    return 1;
+}
+
+//ORA - Bitwise OR the accumulator with fetched data.
+uint8_t CPU::ORA() {
+    fetch();
+    //OR the data in the accumulator with the fetched data.
+    a |= fetched;
+    //Set zero flag if this operation has zeroed out the accumulator.
+    setFlag(zero, a == 0x00);
+    //Set negative flag if bit 7 of the accumulator is 1 (aka negative).
+    setFlag(negative, a == 0x80);
+    //Potentially may require an extra clock cycle if page is crossed, but this is checked in addressing mode. Recall that our clock function will add another
+    //cycle if both the instruction and addressing mode call for another cycle.
+    return 1;
+}
+
+//CMP - Compare accumulator, sets flags as if a subtraction had been carried out.
+uint8_t CPU::CMP() {
+	fetch();
+    uint16_t temp = (uint16_t)a - (uint16_t)fetched;
+	setFlag(carry, a >= fetched);
+	setFlag(zero, (temp & 0x00FF) == 0x0000);
+	setFlag(negative, temp & 0x0080);
+	return 1;
+}
+
+//CPX - Compare X register, sets flags as if a subtraction had been carried out.
+uint8_t CPU::CPX() {
+	fetch();
+    uint16_t temp = (uint16_t)x - (uint16_t)fetched;
+	setFlag(carry, x >= fetched);
+	setFlag(zero, (temp & 0x00FF) == 0x0000);
+	setFlag(negative, temp & 0x0080);
+	return 1;
+}
+
+//CPY - Compare Y register, sets flags as if a subtraction had been carried out.
+uint8_t CPU::CPY() {
+	fetch();
+    uint16_t temp = (uint16_t)y - (uint16_t)fetched;
+	setFlag(carry, y >= fetched);
+	setFlag(zero, (temp & 0x00FF) == 0x0000);
+	setFlag(negative, temp & 0x0080);
+	return 1;
+}
+
+//BIT - Bit Test, places bit 7 of the operand into the N flag and bit 6 of the operand into the V flag. 
+//The operand is then ANDed with the accumulator, and the Z flag is set if the result is zero.
+uint8_t CPU::BIT() {
+    fetch();
+    setFlag(negative, fetched & 0x80);
+    setFlag(overflow, fetched & 0x40);
+	uint16_t temp = a & fetched;
+	setFlag(zero, (temp & 0x00FF) == 0x00);
+    return 0;
+}
+
+//JMP - Jump to next address by modifying the PC.
+uint8_t CPU::JMP() {
+    pc = address_ABS;
+	return 0;
+}
+
+//JSR - jump to subroutine (pushes PC on stack, loads operand into PC)
+uint8_t CPU::JSR() {
+    pc--;
+
+	write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+	stkp--;
+	write(0x0100 + stkp, pc & 0x00FF);
+	stkp--;
+
+	pc = address_ABS;
+	return 0;
+}
+
+//RTS - Pulls the top two bytes off the stack (low byte first) and transfers program control to that address + 1
+uint8_t CPU::RTS() {
+
+    stkp++;
+	pc = (uint16_t)read(0x0100 + stkp);
+	stkp++;
+	pc |= (uint16_t)read(0x0100 + stkp) << 8;
+
+    pc++;
+    return 0;
+}
+
+//BCS - Branch on carry clear
+uint8_t CPU::BCS() {
+    //Carry is clear
+    if (getFlag(carry) == 0)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
 }
 
 //BCS - Branch if the carry bit of the status register is set.
@@ -387,4 +770,198 @@ uint8_t CPU::BCS() {
     }
     
     return 0;
+}
+
+//BEQ - Branch if equals.
+uint8_t CPU::BEQ() {
+    //Zero flag indicates we have made an equivalent comaparison
+    if (getFlag(zero) == 1)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
+}
+
+//BMI - Branch if minus.
+uint8_t CPU::BMI() {
+    //Negative flag is set
+    if (getFlag(negative) == 1)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
+}
+
+//BNE - Branch if not equals.
+uint8_t CPU::BEQ() {
+    //Zero flag not set indicates our comaprison was not equivalent
+    if (getFlag(zero) == 0)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
+}
+
+//BPL - Branch if plus.
+uint8_t CPU::BMI() {
+    //Negative flag is not set
+    if (getFlag(negative) == 0)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
+}
+
+//BVC - Branch if not overflow.
+uint8_t CPU::BVC() {
+    //Overflow flag is not set
+    if (getFlag(overflow) == 0)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
+}
+
+//BVS - Branch if overflow.
+uint8_t CPU::BVS() {
+    //Overflow flag is set
+    if (getFlag(overflow) == 1)
+	{
+		remaining_cycles++;
+		address_ABS = pc + address_REL;
+		
+		if((address_ABS & 0xFF00) != (pc & 0xFF00))
+			remaining_cycles++;
+		
+		pc = address_ABS;
+	}
+	return 0;
+}
+
+//CLC - Clear carry flag
+uint8_t CPU::CLC()
+{
+	setFlag(carry, 0);
+	return 0;
+}
+
+//CLD - Clear decimal flag
+uint8_t CPU::CLD()
+{
+	setFlag(decimal, 0);
+	return 0;
+}
+
+//CLI - Clear interrupt flag
+uint8_t CPU::CLI()
+{
+	setFlag(disable, 0);
+	return 0;
+}
+
+//CLV - Clear overflow flag
+uint8_t CPU::CLV()
+{
+	setFlag(overflow, 0);
+	return 0;
+}
+
+//SEC - Set carry flag
+uint8_t CPU::SEC()
+{
+	setFlag(carry, 1);
+	return 0;
+}
+
+//SED - Set decimal flag
+uint8_t CPU::SED()
+{
+	setFlag(decimal, 1);
+	return 0;
+}
+
+//SED - Set interrupt disable
+uint8_t CPU::SEI()
+{
+	setFlag(disable, 1);
+	return 0;
+}
+
+//BRK - Break, causes a non maskable interrupt and increments the program counter by one.
+uint8_t CPU::BRK() {
+    pc++;
+	
+	setFlag(disable, 1);
+	write(0x0100 + stkp, (pc >> 8) & 0x00FF);
+	stkp--;
+	write(0x0100 + stkp, pc & 0x00FF);
+	stkp--;
+
+	setFlag(brk, 1);
+	write(0x0100 + stkp, status);
+	stkp--;
+	setFlag(brk, 0);
+
+	pc = (uint16_t)read(0xFFFE) | ((uint16_t)read(0xFFFF) << 8);
+	return 0;
+}
+
+//RTI - Return from interrupt, the status register is pulled with the break flag and bit 5 ignored. Then PC is pulled from the stack.
+uint8_t CPU::RTI()
+{
+	stkp++;
+	status = read(0x0100 + stkp);
+	status &= ~brk;
+	status &= ~unused;
+
+	stkp++;
+	pc = (uint16_t)read(0x0100 + stkp);
+	stkp++;
+	pc |= (uint16_t)read(0x0100 + stkp) << 8;
+	return 0;
+}
+
+uint8_t CPU::NOP()
+{
+	switch (opcode) {
+	case 0x1C:
+	case 0x3C:
+	case 0x5C:
+	case 0x7C:
+	case 0xDC:
+	case 0xFC:
+		return 1;
+		break;
+	}
+	return 0;
 }
