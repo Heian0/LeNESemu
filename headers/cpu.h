@@ -94,6 +94,12 @@ class CPU {
         void interrupt();
         //Non Maskable System Interrupt - Can never be ignored.
         void non_maskable_interrupt();
+    
+    // ------------ Disassembler (Temporary) ---------------
+
+        std::map<uint16_t, std::string> disassemble(uint16_t nStart, uint16_t nStop);
+
+        bool complete();
 
     // ----------------- CPU Helper Functions --------------
 
