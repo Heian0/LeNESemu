@@ -1,6 +1,7 @@
 #include "headers/bus.h"
 #include <iostream>
 
+
 //Constructor
 Bus::Bus() {
     //Clear out our RAM.
