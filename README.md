@@ -13,4 +13,4 @@ https://github.com/user-attachments/assets/6a035f2d-b6ba-4ba3-b047-3cdfd628750d
 Down the line it may be interesting to try to have the PPU render to actual objects in the scene and not just the screen to potentially create an HD2D style NES emulator for top down games such as the original Legend of Zelda, or have it to render a screen or physical objects in an AR scene. Below is another video showcasing a scene made in Unity of the HD2D style of games.
 
 
-https://github.com/user-attachments/assets/324f8501-50b8-4e4c-a88f-8fcf77aac3d0
+https://github.com/user-attachments/assets/50b8-4e4c-a88f-8fcf77aac3d0
